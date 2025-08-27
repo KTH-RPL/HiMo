@@ -27,8 +27,8 @@ elapsed=$((end_time - start_time))
 echo "Copy ${SOURCE} to ${DEST} Total time: ${elapsed} seconds"
 echo "Start training..."
 
-# # ========================= SeFlow++ (HiMo) =========================
-$PYTHON train.py slurm_id=$SLURM_JOB_ID wandb_mode=online wandb_project_name=himorain_data=/scratch/local/pdata/train val_data=/scratch/local/pdata/val  \
-     model=deflowpp save_top_model=3 val_every=3 "voxel_size=[0.2, 0.2, 6]" "point_cloud_range=[-51.2, -51.2, -3, 51.2, 51.2, 3]" \
-     num_workers=16 epochs=15 lr=1e-4 batch_size=8 "+add_seloss={chamfer_dis: 1.0, static_flow_loss: 1.0, dynamic_chamfer_dis: 1.0, cluster_based_pc0pc1: 1.0}" \
-     +ssl_label=seflowpp_auto loss_fn=seflowppLoss num_frames=3
+# ========================= SeFlow++ (HiMo) =========================
+$PYTHON train.py slurm_id=$SLURM_JOB_ID wandb_mode=online wandb_project_name=himo train_data=/scratch/local/av2/sensor/train val_data=/scratch/local/av2/sensor/val \
+     model=deflowpp save_top_model=3 val_every=3 "voxel_size=[0.2, 0.2, 6]" "point_cloud_range=[-51.2, -51.2, -3, 51.2, 51.2, 3]" +ssl_label=seflowpp_auto \
+     num_workers=16 epochs=12 num_frames=3 "+add_seloss={chamfer_dis: 1.0, static_flow_loss: 1.0, dynamic_chamfer_dis: 1.0, cluster_based_pc0pc1: 1.0}" \
+     batch_size=8 loss_fn=seflowppLoss optimizer.lr=6e-5 +optimizer.scheduler.name=StepLR +optimizer.scheduler.step_size=3 +optimizer.scheduler.gamma=0.5
