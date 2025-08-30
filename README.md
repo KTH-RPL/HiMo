@@ -3,11 +3,12 @@ HiMo: High-Speed Objects Motion Compensation in Point Clouds
 
 [![arXiv](https://img.shields.io/badge/arXiv-2503.00803-b31b1b?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2503.00803)
 [![page](https://img.shields.io/badge/Project-Page-green)](https://kin-zhang.github.io/HiMo)
-[![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/6eXc6zoQk-4?si=MEo9BEOLlTkZoBw1)
+[![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/rofaKfezIx0?si=59mMPLYUMgvrkRGj)
 
 Note: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). I will try my best to cleanup TBD list here:
 
 - [x] Update the repo README.
+- [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
 - [ ] Test successfully all codes in this repo.
 - [ ] Upload Scania validation set (w/o gt).
 - [ ] Setup leaderboard for users get their Scania val score.
