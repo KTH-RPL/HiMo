@@ -3,8 +3,9 @@
 # Copyright (C) 2024-now, RPL, KTH Royal Institute of Technology
 # Author: Qingwen Zhang  (https://kin-zhang.github.io/)
 
-# Description: print score based on the data file, need save result first. 
-#              Run 4_vis.py to produce output append in existing .h5 file.
+# Description: print compensation score based on flow result or 
+# provided zip file, both need save result first. 
+#
 """
 
 import numpy as np
@@ -13,20 +14,40 @@ from tqdm import tqdm
 from tabulate import tabulate
 
 import os, sys
-BASE_DIR = os.path.abspath(os.path.join( os.path.dirname( __file__ ), '../OpenSceneFlow' ))
+BASE_DIR = os.path.abspath(os.path.join( os.path.dirname( __file__ ), 'OpenSceneFlow' ))
+print(f"--- [Debug] Adding {BASE_DIR} to sys.path ---")
 sys.path.append(BASE_DIR)
-from src.utils.mics import HDF5Data, egopts_mask
+from src.dataset import HDF5Dataset
 from src.utils.av2_eval import CLOSE_DISTANCE_THRESHOLD, BUCKETED_METACATAGORIES, CATEGORY_TO_INDEX
 
+def ego_pts_mask(pts, min_bound=[-9.5, -3/2, 0], max_bound=[5, 2.760004/2, 5]):
+    """
+    Input: pts: (N, 3); min_bound: (3, ); max_bound: (3, )
+    Output: mask: (N, ) indicate the points that are outside the ego vehicle box.
+    """
+    mask = ((pts[:, 0] > min_bound[0]) & (pts[:, 0] < max_bound[0])
+            & (pts[:, 1] > min_bound[1]) & (pts[:, 1] < max_bound[1])
+            & (pts[:, 2] > min_bound[2]) & (pts[:, 2] < max_bound[2]))
+    return ~mask
+
 class InstanceMetrics:
-    def __init__(self, data_name, min_vel = 1.5, sensor_hz = 10.0):
-        self.class_names = self.init_class_data()
-        self.min_vel = min_vel # since inside min_flow (default: 15cm) may not cause error label?
+    def __init__(self, data_name, sensor_hz = 10.0):
         self.frame_cnt = 0
         self.sensor_dt = 1.0 / sensor_hz
         self.data_name = data_name
-    
-    def init_class_data(self):
+
+        # NOTE for custom min_vel: 
+        # 1. scania data have some error-label for small moving (default: 15cm)
+        # 2. normal dataset (1-2 lidar), small flow evaluation didn't have distortion.
+        if data_name in ["scania"]:
+            self.min_vel = 1.5
+        else:
+            self.min_vel = 3.0
+
+        self.evaluate_data = self.init_evaluate_data()
+
+    def init_evaluate_data(self):
+        """Initialize the data structure to hold evaluation metrics."""
         init_data = lambda: {'num_pts': [], 'mpe': [], 'cham': [], 'std_mpe': [], 'std_cham': []}
         dict_data = {"CAR": {}, "OTHER_VEHICLES": {}}
         for cats_name in ["CAR", "OTHER_VEHICLES"]: # , "PEDESTRIAN", "WHEELED_VRU"
@@ -57,9 +78,9 @@ class InstanceMetrics:
         cham = (np.nanmean(np.min(distance_matrix_12, axis=1)) + np.nanmean(np.min(distance_matrix_21, axis=1))) / 2
         return cham
 
-    def step(self, pc, est_flow, gt_flow, pc_dt0, gt_category, gt_instance):
+    def step_flow(self, pc, est_flow, gt_flow, pc_dt0, gt_category, gt_instance):
 
-        frame_score = self.init_class_data()
+        frame_score = self.init_evaluate_data()
         refine_pc = self.refine_pts(pc, self.flow2compDis(est_flow, pc_dt0))
         # NOTE: if you can directly output distance please do:
         # refine_pc = self.refine_pts(pc, est_ds)
@@ -117,9 +138,9 @@ class InstanceMetrics:
                         total_num_pts = sum(num_pts_list)
                         avg_mpe = np.average(frame_score[cats_name][metric][range_name]['mpe'], weights=num_pts_list)
                         avg_cham = np.average(frame_score[cats_name][metric][range_name]['cham'], weights=num_pts_list)
-                        self.class_names[cats_name][metric][range_name]['num_pts'] += num_pts_list
-                        self.class_names[cats_name][metric][range_name]['mpe'] += frame_score[cats_name][metric][range_name]['mpe']
-                        self.class_names[cats_name][metric][range_name]['cham'] += frame_score[cats_name][metric][range_name]['cham']
+                        self.evaluate_data[cats_name][metric][range_name]['num_pts'] += num_pts_list
+                        self.evaluate_data[cats_name][metric][range_name]['mpe'] += frame_score[cats_name][metric][range_name]['mpe']
+                        self.evaluate_data[cats_name][metric][range_name]['cham'] += frame_score[cats_name][metric][range_name]['cham']
                         
                         if metric == 'vel': # only add once.
                             mpe_list.append(avg_mpe)
@@ -135,22 +156,23 @@ class InstanceMetrics:
             std_mpe = np.nanstd(mpe_list)
             std_cham = np.nanstd(cham_list)
 
-            self.class_names[cats_name]['mean']['num_pts'].append(num_pts)
-            self.class_names[cats_name]['mean']['mpe'].append(mean_mpe)
-            self.class_names[cats_name]['mean']['cham'].append(mean_cham)
-            self.class_names[cats_name]['mean']['std_mpe'].append(std_mpe)
-            self.class_names[cats_name]['mean']['std_cham'].append(std_cham)
+            self.evaluate_data[cats_name]['mean']['num_pts'].append(num_pts)
+            self.evaluate_data[cats_name]['mean']['mpe'].append(mean_mpe)
+            self.evaluate_data[cats_name]['mean']['cham'].append(mean_cham)
+            self.evaluate_data[cats_name]['mean']['std_mpe'].append(std_mpe)
+            self.evaluate_data[cats_name]['mean']['std_cham'].append(std_cham)
 
         self.frame_cnt += 1
     
     def print(self, flow_mode="flow", file_name="result_av2.json"):
-        """
-        print the statistics of the refinement metrics. And save the results to a json file.
-        """
+        # --- Helper: Save detailed metrics to JSON (Preserves original structure) ---
         def savejson(overall_data, vel_data, dis_data, flow_mode, category_name):
             if os.path.exists(file_name):
                 with open(file_name, "r") as f:
-                    data = json.load(f)
+                    try:
+                        data = json.load(f)
+                    except json.JSONDecodeError:
+                        data = {}
             else:
                 data = {}
 
@@ -159,118 +181,173 @@ class InstanceMetrics:
             if flow_mode not in data[self.data_name]:
                 data[self.data_name][flow_mode] = {}
 
-            data[self.data_name][flow_mode][category_name] = {
-                    "overall": {"mpe": overall_data[0][1], "cd": overall_data[0][2], "std_mpe": overall_data[0][3], "std_cd": overall_data[0][4], "num_pts": int(overall_data[0][5]), "num_obj": int(overall_data[0][6])},
-                    "velocity": {"0-10": {"mpe": vel_data[0][1], "cd": vel_data[0][2], "num_pts": int(vel_data[0][3]), "num_obj": int(vel_data[0][4])},
-                                "10-20": {"mpe": vel_data[1][1], "cd": vel_data[1][2], "num_pts": int(vel_data[1][3]), "num_obj": int(vel_data[1][4])},
-                                "20-30": {"mpe": vel_data[2][1], "cd": vel_data[2][2], "num_pts": int(vel_data[2][3]), "num_obj": int(vel_data[2][4])},
-                                "30+": {"mpe": vel_data[3][1], "cd": vel_data[3][2], "num_pts": int(vel_data[3][3]), "num_obj": int(vel_data[3][4])}
-                                },
-                    "distance": {"0-10": {"mpe": dis_data[0][1], "cd": dis_data[0][2], "num_pts": int(dis_data[0][3]), "num_obj": int(dis_data[0][4])},
-                                "10-20": {"mpe": dis_data[1][1], "cd": dis_data[1][2], "num_pts": int(dis_data[1][3]), "num_obj": int(dis_data[1][4])},
-                                "20-30": {"mpe": dis_data[2][1], "cd": dis_data[2][2], "num_pts": int(dis_data[2][3]), "num_obj": int(dis_data[2][4])},
-                                "30+": {"mpe": dis_data[3][1], "cd": dis_data[3][2], "num_pts": int(dis_data[3][3]), "num_obj": int(dis_data[3][4])}
-                                }
+            # Construct payload matching original format
+            entry = {
+                "overall": {
+                    "mpe": overall_data[0][1], "cd": overall_data[0][2],
+                    "std_mpe": overall_data[0][3], "std_cd": overall_data[0][4],
+                    "num_pts": int(overall_data[0][5]), "num_obj": int(overall_data[0][6])
+                },
+                "velocity": {},
+                "distance": {}
             }
+            
+            # Map list data to dictionary keys (0-10, 10-20, etc.)
+            ranges = ["0-10", "10-20", "20-30", "30+"]
+            for i, r_name in enumerate(ranges):
+                entry["velocity"][r_name] = {
+                    "mpe": vel_data[i][1], "cd": vel_data[i][2],
+                    "num_pts": int(vel_data[i][3]), "num_obj": int(vel_data[i][4])
+                }
+                entry["distance"][r_name] = {
+                    "mpe": dis_data[i][1], "cd": dis_data[i][2],
+                    "num_pts": int(dis_data[i][3]), "num_obj": int(dis_data[i][4])
+                }
+            
+            data[self.data_name][flow_mode][category_name] = entry
             with open(file_name, "w") as f:
                 json.dump(data, f, indent=4)
         def safe_average(values, weights):
-            return np.average(values, weights=weights) if len(values) > 0 else "N/A"
+            return np.average(values, weights=weights) if len(values) > 0 and np.sum(weights) > 0 else 0.0
         def safe_std(values):
-            return np.std(values) if len(values) > 0 else "N/A"
+            return np.std(values) if len(values) > 0 else 0.0
+
+        # --- Main Logic ---
+        target_cats = ["CAR", "OTHER_VEHICLES"]
+        cat_display_map = {"CAR": "CAR", "OTHER_VEHICLES": "OTHERS"}
+        ranges = ['0-10', '10-20', '20-30', '30+']
         
-        def print_category_data(category_data, category_name):
-            print(f"{category_name} Statistics:")
-            overall_data = [
-                [category_name, 
-                safe_average(category_data['mean']['mpe'], category_data['mean']['num_pts']),
-                safe_average(category_data['mean']['cham'], category_data['mean']['num_pts']),
-                safe_std(category_data['mean']['std_mpe']),
-                safe_std(category_data['mean']['std_cham']),
-                np.sum(category_data['mean']['num_pts']),
-                # instance count
-                len(category_data['mean']['num_pts'])
-                ]
+        # Container to aggregate Total stats
+        total_data = {"mpe": [], "cham": [], "std_mpe": [], "std_cham": [], "num_pts": []}
+        table_rows = []
+
+        print(f"\nHiMo refinement metrics for {flow_mode} in {self.data_name}:")
+
+        for cat in target_cats:
+            if cat not in self.evaluate_data or len(self.evaluate_data[cat]['mean']['num_pts']) == 0:
+                continue
+            
+            raw = self.evaluate_data[cat]
+            mean_raw = raw['mean']
+
+            # 1. Calc Overall Stats for current category
+            cat_mpe = safe_average(mean_raw['mpe'], mean_raw['num_pts'])
+            cat_cd = safe_average(mean_raw['cham'], mean_raw['num_pts'])
+            cat_std_mpe = safe_std(mean_raw['std_mpe'])
+            cat_std_cd = safe_std(mean_raw['std_cham'])
+            cat_n_pts = np.sum(mean_raw['num_pts'])
+            cat_n_obj = len(mean_raw['num_pts'])
+
+            # 2. Accumulate to Total
+            total_data['mpe'].extend(mean_raw['mpe'])
+            total_data['cham'].extend(mean_raw['cham'])
+            total_data['num_pts'].extend(mean_raw['num_pts'])
+            # We don't necessarily need std list for Total unless calculating pooled std, but keeping for consistency
+            
+            # 3. Prepare data for SaveJson (Detailed breakdowns)
+            overall_entry = [[cat, cat_mpe, cat_cd, cat_std_mpe, cat_std_cd, cat_n_pts, cat_n_obj]]
+            vel_entries, dis_entries = [], []
+            
+            for r in ranges:
+                v = raw['vel'][r]
+                vel_entries.append([r, safe_average(v['mpe'], v['num_pts']), safe_average(v['cham'], v['num_pts']), np.sum(v['num_pts']), len(v['num_pts'])])
+                d = raw['dis'][r]
+                dis_entries.append([r, safe_average(d['mpe'], d['num_pts']), safe_average(d['cham'], d['num_pts']), np.sum(d['num_pts']), len(d['num_pts'])])
+
+            savejson(overall_entry, vel_entries, dis_entries, flow_mode, cat)
+
+            table_rows.append([
+                cat_display_map.get(cat, cat),
+                f"{cat_cd:.3f} ± {cat_std_cd:.2f}",
+                f"{cat_mpe:.3f} ± {cat_std_mpe:.2f}",
+                int(cat_n_pts),
+                int(cat_n_obj)
+            ])
+
+        if len(total_data['num_pts']) > 0:
+            tot_mpe = safe_average(total_data['mpe'], total_data['num_pts'])
+            tot_cd = safe_average(total_data['cham'], total_data['num_pts'])
+            
+            total_row = [
+                "Total",
+                f"{tot_cd:.3f}",   # Total usually displayed without std in paper tables
+                f"{tot_mpe:.3f}",
+                int(np.sum(total_data['num_pts'])),
+                int(len(total_data['num_pts']))
             ]
-            print(tabulate(overall_data, headers=["Class", "MPE", "CD", "Std MPE", "Std CD", "NumPts", "#ins"], tablefmt="pretty"))
+            table_rows.insert(0, total_row)
 
-            print("Velocity Ranges:")
-            vel_data = []
-            for range_name in ['0-10', '10-20', '20-30', '30+']:
-                mpe_values = category_data['vel'][range_name]['mpe']
-                cham_values = category_data['vel'][range_name]['cham']
-                num_pts = category_data['vel'][range_name]['num_pts']
-                vel_data.append([
-                    range_name,
-                    safe_average(mpe_values, num_pts),
-                    safe_average(cham_values, num_pts),
-                    np.sum(num_pts),
-                    len(num_pts)
-                ])
-            print(tabulate(vel_data, headers=["Range", "MPE", "CD", "NumPts", "#ins"], tablefmt="pretty"))
-
-            print("Distance Ranges:")
-            dis_data = []
-            for range_name in ['0-10', '10-20', '20-30', '30+']:
-                mpe_values = category_data['dis'][range_name]['mpe']
-                cham_values = category_data['dis'][range_name]['cham']
-                num_pts = category_data['dis'][range_name]['num_pts']
-                dis_data.append([
-                    range_name,
-                    safe_average(mpe_values, num_pts),
-                    safe_average(cham_values, num_pts),
-                    np.sum(num_pts),
-                    len(num_pts)
-                ])
-            print(tabulate(dis_data, headers=["Range", "MPE", "CD", "NumPts", "#ins"], tablefmt="pretty"))
-            
-            savejson(overall_data, vel_data, dis_data, flow_mode, category_name)
-            
-        print(f"HiMo refinement metrics for {flow_mode} method in {self.data_name} data:")
+        # --- Print Final Table ---
+        headers = ["Class", "CDE (Chamfer) ↓", "MPE (Point Err) ↓", "# Points", "# Objs"]
+        print(tabulate(table_rows, headers=headers, tablefmt="fancy_grid", stralign="center"))
+        print(f"Total frames processed: {self.frame_cnt}")
+        print(f"Results saved to {file_name}\n")
         
-        for cats_name in ["CAR", "OTHER_VEHICLES"]: # , "PEDESTRIAN", "WHEELED_VRU"
-            if len(self.class_names[cats_name]['mean']['num_pts']) > 0:
-                print_category_data(self.class_names[cats_name], cats_name)
+def check_valid(data_dir, flow_mode, comp_dis_zip):    
+    # Different dataset have diff ego car size.
+    if data_dir.find("Scania") > 0 or data_dir.find("scania") > 0:
+        data_name = "scania"
+    elif data_dir.find("av2") > 0 or data_dir.find("AV2") > 0:
+        data_name = "av2"
+    else:
+        raise ValueError("Unknown dataset name in data_dir.")
 
-        print(f"Total frames processed: {self.frame_cnt} for {flow_mode} method in {self.data_name} data.")
-    
+    EVAL_FLAG = 0 # invalid
+    # check whether the comp_dis_zip is provided.
+    if os.path.exists(comp_dis_zip):
+        print(f"Using provided comp_dis_zip: {comp_dis_zip} for evaluation.")
+        EVAL_FLAG = 1
+    else:
+        print(f"No valid comp_dis_zip provided, evaluating based on {flow_mode} directly.")
+        
+        # TODO: check whether flow_mode exists in the data.
+        EVAL_FLAG = 2
+
+    return data_name, EVAL_FLAG
 
 def main(
-    # data_dir: str ="/home/kin/data/Scania/preprocess/val",
-    data_dir: str ="/home/kin/data/av2/h5py/sensor/himo_val",
-    flow_mode: str = "raw", 
+    # data_dir: str = "/home/kin/data/Scania/preprocess/val",
+    data_dir: str = "/home/kin/data/av2/h5py/sensor/himo",
+    flow_mode: str = "",
+    comp_dis_zip: str = "",
 ):
-    # FIXME: maybe users' path is different.... change this!!!
-    data_name = data_dir.split("/")[4].lower()
+    data_name, EVAL_FLAG = check_valid(data_dir, flow_mode, comp_dis_zip)
 
-    # NOTE: 1.5 for scania, 3.0 for av2
-    refinement_metrics = InstanceMetrics(min_vel = 3.0, data_name=data_name)
-    dataset = HDF5Data(data_dir, res_name=flow_mode, eval=True)
+    refinement_metrics = InstanceMetrics(data_name=data_name)
+    dataset = HDF5Dataset(data_dir, vis_name=flow_mode if EVAL_FLAG == 2 else '', eval=True)
+
     for data_id in tqdm(range(0, len(dataset)), ncols=80, desc=f"Evaluating {flow_mode} on {data_name}"):
         data = dataset[data_id]
-        pc0 = data['pc0']
-        pose0 = data['pose0']
-        pose1 = data['pose1']
+        pc0, pose0, pose1 = data['pc0'], data['pose0'], data['pose1']
         ego_pose = np.linalg.inv(pose1) @ pose0
         pose_flow = pc0[:, :3] @ ego_pose[:3, :3].T + ego_pose[:3, 3] - pc0[:, :3]
         
-        est_flow = np.zeros_like(pose_flow) if flow_mode == "raw" else (data[flow_mode] - pose_flow)
+        if EVAL_FLAG == 2: # flow-mode evaluation
+            est_flow = np.zeros_like(pose_flow) if flow_mode == "raw" else (data[flow_mode] - pose_flow)
         gt_flow = data['flow'] - pose_flow
 
         pc_dis = np.linalg.norm(pc0[:, :2], axis=1)
         dis_mask = pc_dis <= CLOSE_DISTANCE_THRESHOLD
-        notgm_mask = ~data['ground_mask0']
+        notgm_mask = ~data['gm0']
         # scania
         if data_name == "scania":
-            mask_eval = dis_mask & data['flow_is_valid'] & notgm_mask & egopts_mask(pc0)
+            mask_eval = dis_mask & data['flow_is_valid'] & notgm_mask & ego_pts_mask(pc0)
         else:
-            mask_eval = dis_mask & notgm_mask & egopts_mask(pc0, min_bound=[-1.5, -1.5, -2.0], max_bound=[1.5, 1.5, 2.0])
-
-        dt0 = max(data['dt0']) - data['dt0'] # we want to see the last frame. dts: (N,1) Nanosecond offsets _from_ the start of the sweep.
-        refinement_metrics.step(pc0[mask_eval,:], est_flow[mask_eval,:], gt_flow[mask_eval,:], \
-                                dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval])
+            mask_eval = dis_mask & notgm_mask & ego_pts_mask(pc0, min_bound=[-1.5, -1.5, -2.0], max_bound=[1.5, 1.5, 2.0])
         
-    refinement_metrics.print(flow_mode=flow_mode, file_name=f"result_{data_name}.json")
+        if EVAL_FLAG == 2: 
+            # NOTE: we compensated to the latest observation. dts: (N,1) Nanosecond offsets _from_ the start of the sweep.
+            dt0 = max(data['lidar_dt']) - data['lidar_dt']
+            refinement_metrics.step_flow(pc0[mask_eval,:], est_flow[mask_eval,:], gt_flow[mask_eval,:], \
+                                    dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval])
+        elif EVAL_FLAG == 1:
+            # NOTE: haven't implemented yet for zip file evaluation.
+            pass
+            # comp_dis = from zip file.
+            # refinement_metrics.step_comp_dis(pc0[mask_eval,:], comp_dis, gt_flow[mask_eval,:], \
+            #                         dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval])
+
+    refinement_metrics.print(flow_mode=flow_mode, file_name=f"res-{data_name}.json")
 
 if __name__ == '__main__':
     start_time = time.time()

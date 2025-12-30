@@ -5,7 +5,9 @@ HiMo: High-Speed Objects Motion Compensation in Point Clouds
 [![page](https://img.shields.io/badge/Project-Page-green)](https://kin-zhang.github.io/HiMo)
 [![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/rofaKfezIx0?si=59mMPLYUMgvrkRGj)
 
-Note: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). I will try my best to cleanup TBD list here:
+Note: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). 
+Update 2025-12-30 I'm updating the script now.... Hope I can finish all it before 2026-01-13.
+I will try my best to cleanup TBD list here:
 
 - [x] Update the repo README.
 - [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
@@ -17,7 +19,12 @@ Note: I knew sometime we might want to see codes asap, so I upload all my experi
 
 ## Environment Setup
 
-Please refer to [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) to setup the `opensf` Python environment.
+Clone this repo with submodule:
+```bash
+git clone --recurse-submodules https://github.com/KTH-RPL/HiMo.git
+```
+
+Please refer to [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) to setup the `opensf` Python environment or docker pull the opensf image.
 
 ## Run HiMo
 
@@ -29,38 +36,48 @@ We present Our HiMo pipeline **how to use scene flow** for motion compensation h
 
 ### Run Scene Flow
 
-Please refer to [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) for output the flow, you can use SeFlow++ or other optimization-based baselines in our paper, we pushed all baseline code into our codebase also.
+Please refer to [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) for output the flow, you can use SeFlow++ or other optimization-based baselines in our paper, we also pushed all baseline code into our codebase.
 
 After training, please run [OpenSceneFlow/save.py] for output the flow results:
 ```bash
 # (feed-forward): load ckpt
-python save.py checkpoint=/home/kin/model_zoo/seflow_ppbest.ckpt dataset_path=/home/kin/data/scania/val
+python save.py checkpoint=/home/kin/model_zoo/seflowpp_ppbest.ckpt dataset_path=/home/kin/data/scania/val
 
 # (optimization-based): change another model by passing model name.
-python save.py model=nsfp dataset_path=/home/kin/data/av2/h5py/demo/val
+python save.py model=fastnsf dataset_path=/home/kin/data/av2/h5py/demo/val
 ```
 
-### Save Motion Compensation
+### [TODO] Save Motion Compensation
 
-The methods in HiMo, we first run the scene flow then save the compensation result by [save.py]. While for local validation like in av2, you can directly run [eval.py] as we support read flow and then compensated inside eval code, check more in [evaluation section](#evaluation).
+The methods in HiMo, we first run the scene flow and you can save the compensation distance for each point by [save.py]. 
+While for local validation like in av2, you can directly run [eval.py] as we support read flow and then compensated inside eval code, check more in [evaluation section](#evaluation).
 ```bash
 python save.py
 ```
 
-### Downstream Task
-
-In the paper, we present Segmentation Task: [WaffleIron](https://github.com/KTH-RPL/WaffleIron) and 3D Detection Task: [OpenPCDet](https://github.com/Kin-Zhang/OpenPCDet/tree/feature/himo). 
-We add the running README in each repo for users to be able run HiMo results with downstream task.
-
-
 ## Evaluation
 
-The methods in HiMo, we directly read the scene flow result and output the scores.
+### [TODO] Scania
+You need upload your result files to the public leaderboard page: TODO to get your Scania val score.
 
+### Argoverse 2
+
+As mentioned in the paper, we select high-speed objects scenes, the evaluated frames is listed in [assets/docs/av2/index_eval.pkl](assets/docs/av2/index_eval.pkl). You can download it and put it under av2 .h5 data folder (13 scenes are provided).
+
+Then run the evaluation code:
 ```bash
-python eval.py
+# himo(flow): first run scene flow with flow-mode the motion compensation will be done inside eval code.
+# others: save your comp_dis results as .zip file under each scene folder, then run eval code.
+
+python eval.py --data_dir /home/kin/data/av2/h5py/sensor/himo --flow_mode 'seflowpp'
 ```
 
+### Downstream Task
+
+In the paper, we present Segmentation Task: [WaffleIron](https://github.com/KTH-RPL/WaffleIron) and 
+3D Detection Task: [OpenPCDet](https://github.com/Kin-Zhang/OpenPCDet/tree/feature/himo). 
+
+[TODO] We add the running README in each repo for users to be able run HiMo results with downstream task.
 
 ## Visualization
 
