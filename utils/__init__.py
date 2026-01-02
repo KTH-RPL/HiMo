@@ -1,7 +1,7 @@
 import numpy as np
 import os, sys
 
-def check_valid(data_dir, flow_mode, comp_dis_zip):    
+def check_valid(data_dir, flow_mode, comp_dis_zip=None):    
     # Different dataset have diff ego car size.
     if data_dir.find("Scania") > 0 or data_dir.find("scania") > 0:
         data_name = "scania"
@@ -12,7 +12,7 @@ def check_valid(data_dir, flow_mode, comp_dis_zip):
 
     EVAL_FLAG = 0 # invalid
     # check whether the comp_dis_zip is provided.
-    if os.path.exists(comp_dis_zip):
+    if comp_dis_zip is not None and os.path.exists(comp_dis_zip):
         print(f"Using provided comp_dis_zip: {comp_dis_zip} for evaluation.")
         EVAL_FLAG = 1
     else:

@@ -12,7 +12,7 @@ import numpy as np
 import fire, time, json
 from tqdm import tqdm
 from tabulate import tabulate
-
+from scipy.spatial import cKDTree
 import os, sys
 BASE_DIR = os.path.abspath(os.path.join( os.path.dirname( __file__ ), 'OpenSceneFlow' ))
 sys.path.append(BASE_DIR)
@@ -46,15 +46,20 @@ class InstanceMetrics:
             dict_data[cats_name]['dis'] = {range_name: init_data() for range_name in ['0-10', '10-20', '20-30', '30+']}
             dict_data[cats_name]['mean'] = init_data()
         return dict_data
-        
-    def cal_cham(self, pc1, pc2):
+
+    def cal_chamfer(self, pc1: np.ndarray, pc2: np.ndarray) -> float:
+        """Calculate Chamfer distance using KD-trees (memory-efficient).
+
+        Chamfer distance = (mean(min_dist(pc1->pc2)) + mean(min_dist(pc2->pc1))) / 2
         """
-        definition of chamfer distance: https://github.com/UM-ARM-Lab/Chamfer-Distance-API?tab=readme-ov-file#chamfer-distance-api
-        """
-        distance_matrix_12 = np.linalg.norm(pc1[:, None] - pc2, axis=2)
-        distance_matrix_21 = np.linalg.norm(pc2[:, None] - pc1, axis=2)
-        cham = (np.nanmean(np.min(distance_matrix_12, axis=1)) + np.nanmean(np.min(distance_matrix_21, axis=1))) / 2
-        return cham
+        if len(pc1) == 0 or len(pc2) == 0:
+            return float('nan')
+        tree2 = cKDTree(pc2)
+        d12, _ = tree2.query(pc1, k=1)
+        tree1 = cKDTree(pc1)
+        d21, _ = tree1.query(pc2, k=1)
+        cham = (np.nanmean(d12) + np.nanmean(d21)) / 2.0
+        return float(cham)
 
     def step_eval(self, pc, gt_flow, pc_dt0, gt_category, gt_instance, est_flow=None, est_dis=None):
 
@@ -88,7 +93,7 @@ class InstanceMetrics:
                     continue
                 dis_ins = np.linalg.norm(pc[mask_class][mask], axis=1).mean()
                 mpe = np.linalg.norm(gt_refine_pc_class[mask] - refine_pc_class[mask], axis=1).mean()
-                cham = self.cal_cham(gt_refine_pc_class[mask], refine_pc_class[mask])
+                cham = self.cal_chamfer(gt_refine_pc_class[mask], refine_pc_class[mask])
 
                 # Categorize based on velocity and distance
                 for metric, values in [('vel', vel_ins), ('dis', dis_ins)]:

@@ -102,11 +102,10 @@ def zip_res(res_folder, output_file="submit.zip"):
 def main(
     # data_dir: str ="/home/kin/data/Scania/preprocess/val",
     data_dir: str ="/home/kin/data/av2/h5py/sensor/himo/demo",
-    output_dir: str = "/home/kin/data/av2/h5py/sensor/himo/results",
     res_name: str = "seflowpp_best"
 ):
     data_dir = Path(data_dir)
-    output_dir = Path(output_dir)
+    output_dir = data_dir / 'results'
     output_dir.mkdir(exist_ok=True, parents=True)
 
     dataset = HDF5Dataset(data_dir, vis_name=res_name, eval=True)

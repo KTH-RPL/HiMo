@@ -83,6 +83,10 @@ python save_zip.py --data_dir /home/kin/data/scania/val --res_name 'seflowpp_bes
 
 ```
 
+For HiMo (SeFlow++), the screenshot of Scania leaderboard as shown below, the model is self-supervised trained on internal train data and then directly evaluated on Scania val set.
+
+![Scania Leaderboard](assets/docs/himo_seflowpp_scania_res.png)
+
 ### Argoverse 2
 
 As mentioned in the paper, we select high-speed objects scenes, the evaluated frames is listed in [assets/docs/av2/index_eval.pkl](assets/docs/av2/index_eval.pkl). You can download it and put it under av2 .h5 data folder (13 scenes are provided).
@@ -92,7 +96,7 @@ Then run the evaluation code:
 # himo(flow): first run scene flow with flow-mode the motion compensation will be done inside eval code.
 # others: save your comp_dis results as .zip file under each scene folder, then run eval code.
 
-python eval.py --data_dir /home/kin/data/av2/h5py/sensor/himo --flow_mode 'seflowpp'
+python eval.py --data_dir /home/kin/data/av2/h5py/sensor/himo --flow_mode 'seflowpp_best'
 ```
 
 ### Downstream Task
