@@ -6,8 +6,9 @@ HiMo: High-Speed Objects Motion Compensation in Point Clouds
 [![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/rofaKfezIx0?si=59mMPLYUMgvrkRGj)
 
 Note: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). 
-Update 2025-12-30 I'm updating the script now.... Hope I can finish all it before 2026-01-13.
 I will try my best to cleanup TBD list here:
+
+Update 2025-12-30 I'm back and updating the script now.... Hope I can finish all it before 2026-01-13.
 
 - [x] Update the repo README.
 - [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
@@ -40,25 +41,47 @@ Please refer to [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) for ou
 
 After training, please run [OpenSceneFlow/save.py] for output the flow results:
 ```bash
+cd OpenSceneFlow
 # (feed-forward): load ckpt
-python save.py checkpoint=/home/kin/model_zoo/seflowpp_ppbest.ckpt dataset_path=/home/kin/data/scania/val
+python save.py checkpoint=/home/kin/model_zoo/seflowpp_best.ckpt dataset_path=/home/kin/data/scania/val
 
 # (optimization-based): change another model by passing model name.
 python save.py model=fastnsf dataset_path=/home/kin/data/av2/h5py/demo/val
 ```
 
-### [TODO] Save Motion Compensation
+### Save Motion Compensation
 
-The methods in HiMo, we first run the scene flow and you can save the compensation distance for each point by [save.py]. 
-While for local validation like in av2, you can directly run [eval.py] as we support read flow and then compensated inside eval code, check more in [evaluation section](#evaluation).
+For local validation like in av2, you can directly run [eval.py] as we support read scene flow (HiMo) and then compensated inside eval code, 
+check more in [evaluation section](#evaluation).
+
+However, to support further method and eval on the public leaderboard, we provide the [save_zip.py](save_zip.py) script to save compensation distance for each point as .zip file under each scene folder.
+
 ```bash
-python save.py
+# HiMo (seflow++)
+python save_zip.py --data_dir /home/kin/data/scania/val --res_name 'seflowpp_best'
 ```
+
+For further method, you can refer this script for the same format saving.
 
 ## Evaluation
 
-### [TODO] Scania
-You need upload your result files to the public leaderboard page: TODO to get your Scania val score.
+### Scania
+
+You need upload your result files to the public leaderboard page, we present the best model we have in the paper:
+```bash
+cd OpenSceneFlow
+# (feed-forward): load ckpt
+python save.py checkpoint=/home/kin/model_zoo/seflowpp_best.ckpt dataset_path=/home/kin/data/scania/val
+
+cd .. # back to HiMo
+python save_zip.py --data_dir /home/kin/data/scania/val --res_name 'seflowpp_best'
+```
+
+[TODO] Then you can submit the generated .zip files to the [HiMo Leaderboard]() for evaluation.
+```bash
+# todo: check how codabench works for large zip file (2GB+)
+
+```
 
 ### Argoverse 2
 
@@ -74,7 +97,7 @@ python eval.py --data_dir /home/kin/data/av2/h5py/sensor/himo --flow_mode 'seflo
 
 ### Downstream Task
 
-In the paper, we present Segmentation Task: [WaffleIron](https://github.com/KTH-RPL/WaffleIron) and 
+In the paper, we present Segmentation Task: [WaffleIron](https://github.com/Kin-Zhang/WaffleIron/feature/himo) and 
 3D Detection Task: [OpenPCDet](https://github.com/Kin-Zhang/OpenPCDet/tree/feature/himo). 
 
 [TODO] We add the running README in each repo for users to be able run HiMo results with downstream task.
@@ -106,10 +129,13 @@ For Video animation example, we use [manim](https://www.manim.community/). I may
 
 ```
 @article{zhang2025himo,
-    title={{HiMo}: High-Speed Objects Motion Compensation in Point Clouds},
-    author={Zhang, Qingwen and Khoche, Ajinkya and Yang, Yi and Ling, Li and Sina, Sharif Mansouri and Andersson, Olov and Jensfelt, Patric},
-    year={2025},
-    journal={arXiv preprint arXiv:2503.00803},
+  title={{HiMo}: High-Speed Objects Motion Compensation in Point Cloud},
+  author={Zhang, Qingwen and Khoche, Ajinkya and Yang, Yi and Ling, Li and Mansouri, Sina Sharif and Andersson, Olov and Jensfelt, Patric},
+  journal={IEEE Transactions on Robotics}, 
+  year={2025},
+  volume={41},
+  pages={5896-5911},
+  doi={10.1109/TRO.2025.3619042}
 }
 ```
 

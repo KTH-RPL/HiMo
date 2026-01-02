@@ -15,21 +15,12 @@ from tabulate import tabulate
 
 import os, sys
 BASE_DIR = os.path.abspath(os.path.join( os.path.dirname( __file__ ), 'OpenSceneFlow' ))
-print(f"--- [Debug] Adding {BASE_DIR} to sys.path ---")
 sys.path.append(BASE_DIR)
+
 from src.dataset import HDF5Dataset
 from src.utils.av2_eval import CLOSE_DISTANCE_THRESHOLD, BUCKETED_METACATAGORIES, CATEGORY_TO_INDEX
-
-def ego_pts_mask(pts, min_bound=[-9.5, -3/2, 0], max_bound=[5, 2.760004/2, 5]):
-    """
-    Input: pts: (N, 3); min_bound: (3, ); max_bound: (3, )
-    Output: mask: (N, ) indicate the points that are outside the ego vehicle box.
-    """
-    mask = ((pts[:, 0] > min_bound[0]) & (pts[:, 0] < max_bound[0])
-            & (pts[:, 1] > min_bound[1]) & (pts[:, 1] < max_bound[1])
-            & (pts[:, 2] > min_bound[2]) & (pts[:, 2] < max_bound[2]))
-    return ~mask
-
+from utils import flow2compDis, refine_pts, ego_pts_mask, check_valid
+from save_zip import read_output_zip
 class InstanceMetrics:
     def __init__(self, data_name, sensor_hz = 10.0):
         self.frame_cnt = 0
@@ -55,19 +46,6 @@ class InstanceMetrics:
             dict_data[cats_name]['dis'] = {range_name: init_data() for range_name in ['0-10', '10-20', '20-30', '30+']}
             dict_data[cats_name]['mean'] = init_data()
         return dict_data
-
-    def flow2compDis(self, flow, dt0):
-        """
-        refine points belong to a instance based on the flow and dt0.
-        dt0: nanosecond offsets _from_ the start of the sweep. 
-            * The first point dt is normally 0.0 since it's the start of the sweep.
-            * So the latest point dt is normally T_sensor like 0.1.
-        """
-        return flow/self.sensor_dt * dt0[:, None] 
-
-    def refine_pts(self, pc, ds):
-        ref_pc = pc[:,:3] + ds
-        return ref_pc
         
     def cal_cham(self, pc1, pc2):
         """
@@ -78,14 +56,15 @@ class InstanceMetrics:
         cham = (np.nanmean(np.min(distance_matrix_12, axis=1)) + np.nanmean(np.min(distance_matrix_21, axis=1))) / 2
         return cham
 
-    def step_flow(self, pc, est_flow, gt_flow, pc_dt0, gt_category, gt_instance):
+    def step_eval(self, pc, gt_flow, pc_dt0, gt_category, gt_instance, est_flow=None, est_dis=None):
 
         frame_score = self.init_evaluate_data()
-        refine_pc = self.refine_pts(pc, self.flow2compDis(est_flow, pc_dt0))
-        # NOTE: if you can directly output distance please do:
-        # refine_pc = self.refine_pts(pc, est_ds)
-        
-        gt_refine_pc = self.refine_pts(pc, self.flow2compDis(gt_flow, pc_dt0))
+        if est_flow is not None:
+            refine_pc = refine_pts(pc, flow2compDis(est_flow, pc_dt0, sensor_dt=self.sensor_dt))
+        elif est_dis is not None:
+            refine_pc = refine_pts(pc, est_dis)
+
+        gt_refine_pc = refine_pts(pc, flow2compDis(gt_flow, pc_dt0, sensor_dt=self.sensor_dt))
 
         # different categories
         for cats_name in ["CAR", "OTHER_VEHICLES"]:
@@ -282,28 +261,6 @@ class InstanceMetrics:
         print(tabulate(table_rows, headers=headers, tablefmt="fancy_grid", stralign="center"))
         print(f"Total frames processed: {self.frame_cnt}")
         print(f"Results saved to {file_name}\n")
-        
-def check_valid(data_dir, flow_mode, comp_dis_zip):    
-    # Different dataset have diff ego car size.
-    if data_dir.find("Scania") > 0 or data_dir.find("scania") > 0:
-        data_name = "scania"
-    elif data_dir.find("av2") > 0 or data_dir.find("AV2") > 0:
-        data_name = "av2"
-    else:
-        raise ValueError("Unknown dataset name in data_dir.")
-
-    EVAL_FLAG = 0 # invalid
-    # check whether the comp_dis_zip is provided.
-    if os.path.exists(comp_dis_zip):
-        print(f"Using provided comp_dis_zip: {comp_dis_zip} for evaluation.")
-        EVAL_FLAG = 1
-    else:
-        print(f"No valid comp_dis_zip provided, evaluating based on {flow_mode} directly.")
-        
-        # TODO: check whether flow_mode exists in the data.
-        EVAL_FLAG = 2
-
-    return data_name, EVAL_FLAG
 
 def main(
     # data_dir: str = "/home/kin/data/Scania/preprocess/val",
@@ -321,31 +278,31 @@ def main(
         pc0, pose0, pose1 = data['pc0'], data['pose0'], data['pose1']
         ego_pose = np.linalg.inv(pose1) @ pose0
         pose_flow = pc0[:, :3] @ ego_pose[:3, :3].T + ego_pose[:3, 3] - pc0[:, :3]
-        
-        if EVAL_FLAG == 2: # flow-mode evaluation
-            est_flow = np.zeros_like(pose_flow) if flow_mode == "raw" else (data[flow_mode] - pose_flow)
         gt_flow = data['flow'] - pose_flow
 
         pc_dis = np.linalg.norm(pc0[:, :2], axis=1)
         dis_mask = pc_dis <= CLOSE_DISTANCE_THRESHOLD
         notgm_mask = ~data['gm0']
+
         # scania
         if data_name == "scania":
             mask_eval = dis_mask & data['flow_is_valid'] & notgm_mask & ego_pts_mask(pc0)
         else:
             mask_eval = dis_mask & notgm_mask & ego_pts_mask(pc0, min_bound=[-1.5, -1.5, -2.0], max_bound=[1.5, 1.5, 2.0])
         
+        # NOTE: we compensated to the latest observation. dts: (N,1) Nanosecond offsets _from_ the start of the sweep.
+        dt0 = max(data['lidar_dt']) - data['lidar_dt']
+        
         if EVAL_FLAG == 2: 
-            # NOTE: we compensated to the latest observation. dts: (N,1) Nanosecond offsets _from_ the start of the sweep.
-            dt0 = max(data['lidar_dt']) - data['lidar_dt']
-            refinement_metrics.step_flow(pc0[mask_eval,:], est_flow[mask_eval,:], gt_flow[mask_eval,:], \
-                                    dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval])
+            est_flow = np.zeros_like(pose_flow) if flow_mode == "raw" else (data[flow_mode] - pose_flow)
+            refinement_metrics.step_eval(pc0[mask_eval,:], gt_flow[mask_eval,:], \
+                                    dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval],
+                                    est_flow=est_flow[mask_eval,:])
         elif EVAL_FLAG == 1:
-            # NOTE: haven't implemented yet for zip file evaluation.
-            pass
-            # comp_dis = from zip file.
-            # refinement_metrics.step_comp_dis(pc0[mask_eval,:], comp_dis, gt_flow[mask_eval,:], \
-            #                         dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval])
+            comp_dis = read_output_zip(comp_dis_zip, (data['scene_id'], str(data['timestamp'])))
+            refinement_metrics.step_eval(pc0[mask_eval,:], gt_flow[mask_eval,:], \
+                                    dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval],
+                                    est_dis=comp_dis[mask_eval,:])
 
     refinement_metrics.print(flow_mode=flow_mode, file_name=f"res-{data_name}.json")
 

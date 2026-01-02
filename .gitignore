@@ -2,3 +2,4 @@
 # save data
 *.json
 *.txt
+*.pyc
