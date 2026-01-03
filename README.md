@@ -12,9 +12,10 @@ Update 2025-12-30 I'm back and updating the script now.... Hope I can finish all
 
 - [x] Update the repo README.
 - [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
-- [ ] Test successfully all codes in this repo.
+- [x] Test successfully evaluation codes on Scania and Argoverse2.
+- [ ] Test successfully visualization codes.
 - [ ] Upload Scania validation set (w/o gt).
-- [ ] Setup leaderboard for users get their Scania val score.
+- [x] Setup leaderboard for users get their Scania val score.
 - [ ] Downstream task two repos README update.
 - [ ] Public the author-response file for readers to check some discussion and future directions etc.
 
@@ -77,13 +78,9 @@ cd .. # back to HiMo
 python save_zip.py --data_dir /home/kin/data/scania/val --res_name 'seflowpp_best'
 ```
 
-[TODO] Then you can submit the generated .zip files to the [HiMo Leaderboard]() for evaluation.
-```bash
-# todo: check how codabench works for large zip file (2GB+)
+Then you can submit the generated .zip files to the [HiMo Codabench Leaderboard](https://www.codabench.org/competitions/12524) for evaluation.
 
-```
-
-For HiMo (SeFlow++), the screenshot of Scania leaderboard as shown below, the model is self-supervised trained on internal train data and then directly evaluated on Scania val set.
+Note that for HiMo (SeFlow++) and other methods, the screenshot of Scania leaderboard as shown below, data-driven baselines are self-supervised trained on internal train data and then directly evaluated on Scania val set.
 
 ![Scania Leaderboard](assets/docs/himo_seflowpp_scania_res.png)
 

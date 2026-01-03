@@ -148,9 +148,9 @@ class InstanceMetrics:
 
         self.frame_cnt += 1
     
-    def print(self, flow_mode="flow", file_name="result_av2.json"):
+    def print(self, res_name="flow", file_name="result_av2.json"):
         # --- Helper: Save detailed metrics to JSON (Preserves original structure) ---
-        def savejson(overall_data, vel_data, dis_data, flow_mode, category_name):
+        def savejson(overall_data, vel_data, dis_data, res_name, category_name):
             if os.path.exists(file_name):
                 with open(file_name, "r") as f:
                     try:
@@ -162,8 +162,8 @@ class InstanceMetrics:
 
             if self.data_name not in data:
                 data[self.data_name] = {}
-            if flow_mode not in data[self.data_name]:
-                data[self.data_name][flow_mode] = {}
+            if res_name not in data[self.data_name]:
+                data[self.data_name][res_name] = {}
 
             # Construct payload matching original format
             entry = {
@@ -188,7 +188,7 @@ class InstanceMetrics:
                     "num_pts": int(dis_data[i][3]), "num_obj": int(dis_data[i][4])
                 }
             
-            data[self.data_name][flow_mode][category_name] = entry
+            data[self.data_name][res_name][category_name] = entry
             with open(file_name, "w") as f:
                 json.dump(data, f, indent=4)
         def safe_average(values, weights):
@@ -205,7 +205,7 @@ class InstanceMetrics:
         total_data = {"mpe": [], "cham": [], "std_mpe": [], "std_cham": [], "num_pts": []}
         table_rows = []
 
-        print(f"\nHiMo refinement metrics for {flow_mode} in {self.data_name}:")
+        print(f"\nHiMo refinement metrics for {res_name} in {self.data_name}:")
 
         for cat in target_cats:
             if cat not in self.evaluate_data or len(self.evaluate_data[cat]['mean']['num_pts']) == 0:
@@ -238,7 +238,7 @@ class InstanceMetrics:
                 d = raw['dis'][r]
                 dis_entries.append([r, safe_average(d['mpe'], d['num_pts']), safe_average(d['cham'], d['num_pts']), np.sum(d['num_pts']), len(d['num_pts'])])
 
-            savejson(overall_entry, vel_entries, dis_entries, flow_mode, cat)
+            savejson(overall_entry, vel_entries, dis_entries, res_name, cat)
 
             table_rows.append([
                 cat_display_map.get(cat, cat),
@@ -270,15 +270,15 @@ class InstanceMetrics:
 def main(
     # data_dir: str = "/home/kin/data/Scania/preprocess/val",
     data_dir: str = "/home/kin/data/av2/h5py/sensor/himo",
-    flow_mode: str = "",
+    res_name: str = "",
     comp_dis_zip: str = "",
 ):
-    data_name, EVAL_FLAG = check_valid(data_dir, flow_mode, comp_dis_zip)
+    data_name, EVAL_FLAG = check_valid(data_dir, res_name, comp_dis_zip)
 
     refinement_metrics = InstanceMetrics(data_name=data_name)
-    dataset = HDF5Dataset(data_dir, vis_name=flow_mode if EVAL_FLAG == 2 else '', eval=True)
+    dataset = HDF5Dataset(data_dir, vis_name=res_name if EVAL_FLAG == 2 else '', eval=True)
 
-    for data_id in tqdm(range(0, len(dataset)), ncols=80, desc=f"Evaluating {flow_mode} on {data_name}"):
+    for data_id in tqdm(range(0, len(dataset)), ncols=80, desc=f"Evaluating {res_name} on {data_name}"):
         data = dataset[data_id]
         pc0, pose0, pose1 = data['pc0'], data['pose0'], data['pose1']
         ego_pose = np.linalg.inv(pose1) @ pose0
@@ -299,7 +299,7 @@ def main(
         dt0 = max(data['lidar_dt']) - data['lidar_dt']
         
         if EVAL_FLAG == 2: 
-            est_flow = np.zeros_like(pose_flow) if flow_mode == "raw" else (data[flow_mode] - pose_flow)
+            est_flow = np.zeros_like(pose_flow) if res_name == "raw" else (data[res_name] - pose_flow)
             refinement_metrics.step_eval(pc0[mask_eval,:], gt_flow[mask_eval,:], \
                                     dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval],
                                     est_flow=est_flow[mask_eval,:])
@@ -309,7 +309,7 @@ def main(
                                     dt0[mask_eval], data['flow_category_indices'][mask_eval], data['flow_instance_id'][mask_eval],
                                     est_dis=comp_dis[mask_eval,:])
 
-    refinement_metrics.print(flow_mode=flow_mode, file_name=f"res-{data_name}.json")
+    refinement_metrics.print(res_name=res_name, file_name=f"res-{data_name}.json")
 
 if __name__ == '__main__':
     start_time = time.time()
