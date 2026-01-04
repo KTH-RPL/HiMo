@@ -16,8 +16,8 @@ Update 2025-12-30 I'm back and updating the script now.... Hope I can finish all
 - [ ] Test successfully visualization codes.
 - [ ] Upload Scania validation set (w/o gt).
 - [x] Setup leaderboard for users get their Scania val score.
-- [ ] Downstream task two repos README update.
-- [ ] Public the author-response file for readers to check some discussion and future directions etc.
+- [x] Downstream task two repos README update.
+- [x] Public the [author-response file](https://github.com/KTH-RPL/HiMo/discussions/1) for readers to check some discussion and future directions etc.
 
 ## Environment Setup
 
@@ -100,8 +100,7 @@ python eval.py --data_dir /home/kin/data/av2/h5py/sensor/himo --flow_mode 'seflo
 
 In the paper, we present Segmentation Task: [WaffleIron](https://github.com/Kin-Zhang/WaffleIron/feature/himo) and 
 3D Detection Task: [OpenPCDet](https://github.com/Kin-Zhang/OpenPCDet/tree/feature/himo). 
-
-[TODO] We add the running README in each repo for users to be able run HiMo results with downstream task.
+Please refer to the [downstream/README.md](downstream/README.md) for more details.
 
 ## Visualization
 

@@ -1,3 +1,9 @@
 [submodule "OpenSceneFlow"]
 	path = OpenSceneFlow
 	url = https://github.com/KTH-RPL/OpenSceneFlow
+[submodule "OpenPCDet"]
+	path = downstream/OpenPCDet
+	url = https://github.com/Kin-Zhang/OpenPCDet.git
+[submodule "WaffleIron"]
+	path = downstream/WaffleIron
+	url = https://github.com/Kin-Zhang/WaffleIron.git
