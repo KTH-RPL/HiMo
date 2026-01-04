@@ -5,16 +5,16 @@ HiMo: High-Speed Objects Motion Compensation in Point Clouds
 [![page](https://img.shields.io/badge/Project-Page-green)](https://kin-zhang.github.io/HiMo)
 [![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/rofaKfezIx0?si=59mMPLYUMgvrkRGj)
 
-Note: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). 
+Note 2025-08-28: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). 
 I will try my best to cleanup TBD list here:
 
-Update 2025-12-30 I'm back and updating the script now.... Hope I can finish all it before 2026-01-13.
+Update 2025-12-30: I'm back and updating the script now.... Hope I can finish all it before 2026-01-13.
 
 - [x] Update the repo README.
 - [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
 - [x] Test successfully evaluation codes on Scania and Argoverse2.
 - [ ] Test successfully visualization codes.
-- [ ] Upload Scania validation set (w/o gt).
+- [x] Upload Scania validation set (w/o gt).
 - [x] Setup leaderboard for users get their Scania val score.
 - [x] Downstream task two repos README update.
 - [x] Public the [author-response file](https://github.com/KTH-RPL/HiMo/discussions/1) for readers to check some discussion and future directions etc.
@@ -68,7 +68,14 @@ For further method, you can refer this script for the same format saving.
 
 ### Scania
 
-You need upload your result files to the public leaderboard page, we present the best model we have in the paper:
+First download the Scania validation set from [huggingface](https://huggingface.co/datasets/KTH/HiMo) (~ 2GB) with 10 scenes.
+```bash
+# setup hf cli if you don't have it
+# curl -LsSf https://hf.co/cli/install.sh | bash
+hf download KTH/HiMo --repo-type dataset
+```
+
+Get the result files with HiMo by following the best model we have in the paper, and save the .zip files for afterward online evaluation:
 ```bash
 cd OpenSceneFlow
 # (feed-forward): load ckpt
@@ -139,9 +146,7 @@ For Video animation example, we use [manim](https://www.manim.community/). I may
 }
 ```
 
-💞 Thanks to Bogdan Timus and Magnus Granström from Scania and Ci Li from KTH RPL, who helped with this work. 
-We also thank Yixi Cai, Yuxuan Liu, Peizheng Li and Shenghai Yuan for helpful discussions during revision.
-We also thank the anonymous reviewers for their useful comments.
+💞 We sincerely thank Bogdan Timus and Magnus Granström (Scania) and Ci Li (KTH RPL) for their contributions to this work. We also appreciate Yixi Cai, Yuxuan Liu, Peizheng Li, and Shenghai Yuan for their insightful discussions, as well as the anonymous reviewers for their valuable feedback.
 
 This work was partially supported by the Wallenberg AI, Autonomous Systems and Software Program (WASP) funded by the Knut and Alice Wallenberg Foundation and Prosense (2020-02963) funded by Vinnova. 
 The computations were enabled by the supercomputing resource Berzelius provided by National Supercomputer Centre at Linköping University and the Knut and Alice Wallenberg Foundation, Sweden.
