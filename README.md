@@ -2,20 +2,23 @@ HiMo: High-Speed Objects Motion Compensation in Point Clouds
 ---
 
 [![arXiv](https://img.shields.io/badge/arXiv-2503.00803-b31b1b?logo=arxiv&logoColor=white)](https://arxiv.org/abs/2503.00803)
-[![page](https://img.shields.io/badge/Project-Page-green)](https://kin-zhang.github.io/HiMo)
+[![page](https://img.shields.io/badge/Project-Page-green?logo=homepage)](https://kin-zhang.github.io/HiMo)
 [![video](https://img.shields.io/badge/video-YouTube-FF0000?logo=youtube&logoColor=white)](https://youtu.be/rofaKfezIx0?si=59mMPLYUMgvrkRGj)
+[![data](https://img.shields.io/badge/Data-HuggingFace-74b9ff?logo=huggingface)](https://huggingface.co/datasets/KTH/HiMo)
+[![leaderboard](https://img.shields.io/badge/Leaderboard-Codabench-blue)](https://www.codabench.org/competitions/12524)
 
-Note 2025-08-28: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc). 
-I will try my best to cleanup TBD list here:
 
-Update 2025-12-30: I'm back and updating the script now.... Hope I can finish all it before 2026-01-13.
+<!-- Note 2025-08-28: I knew sometime we might want to see codes asap, so I upload all my experiment codes without cleaning up (some lib might missing etc).  -->
+<!-- I will try my best to cleanup TBD list here: -->
 
+<!-- Update 2025-12-30: I'm back and updating the script now.... Hope I can finish all it before 2026-01-13. -->
+Setup Tasks:
 - [x] Update the repo README.
-- [x] Update OpenSceneFlow repo for dataprocess and SeFlow++.
+- [x] Update [OpenSceneFlow](https://github.com/KTH-RPL/OpenSceneFlow) repo for dataprocess and SeFlow++.
 - [x] Test successfully evaluation codes on Scania and Argoverse2.
 - [ ] Test successfully visualization codes.
-- [x] Upload Scania validation set (w/o gt).
-- [x] Setup leaderboard for users get their Scania val score.
+- [x] Upload [Scania validation set (w/o gt)](https://huggingface.co/datasets/KTH/HiMo).
+- [x] Setup [leaderboard](https://www.codabench.org/competitions/12524) for users get their Scania val score.
 - [x] Downstream task two repos README update.
 - [x] Public the [author-response file](https://github.com/KTH-RPL/HiMo/discussions/1) for readers to check some discussion and future directions etc.
 
@@ -72,7 +75,7 @@ First download the Scania validation set from [huggingface](https://huggingface.
 ```bash
 # setup hf cli if you don't have it
 # curl -LsSf https://hf.co/cli/install.sh | bash
-hf download KTH/HiMo --repo-type dataset
+hf download KTH/HiMo --repo-type dataset --local-dir /home/kin/data/scania/val
 ```
 
 Get the result files with HiMo by following the best model we have in the paper, and save the .zip files for afterward online evaluation:
@@ -121,6 +124,8 @@ For paper results, I manually select some instance for a clearer qualitative com
 python tools/view_instance.py
 ```
 
+### Animation
+
 For project website animation, check [tools/animation_video.py](tools/animation_video.py).
 ```python
 # first step:
@@ -130,7 +135,7 @@ fire.Fire(save_animation_traj)
 fire.Fire(animation_video)
 ```
 
-For Video animation example, we use [manim](https://www.manim.community/). I may upload this part also for tutorial purpose etc.
+For Video animation example in Youtube and Presentation, we use [manim](https://www.manim.community/). I uploaded the manim project file under [tools/manim_himo](tools/manim_himo) for readers to check.
 
 ## Cite & Acknowledgements
 
